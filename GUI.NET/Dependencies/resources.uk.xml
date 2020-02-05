@@ -355,8 +355,6 @@
 			<Control ID="chkSingleInstance">Дозволити лише одну копію Mesen одночасно</Control>
 			<Control ID="chkAutomaticallyCheckForUpdates">Автоматично перевіряти оновлення</Control>
 
-			<Control ID="chkDeveloperMode">Увімкнути режим розробника</Control>
-
 			<Control ID="lblPauseBackgroundSettings">Пауза/Фонові настройки</Control>
 			<Control ID="lblMiscSettings">Різнi настройки</Control>
 			<Control ID="chkAutoHideMenu">Автоматично приховувати панель меню</Control>
@@ -551,7 +549,7 @@
 		</Form>
 		<Form ID="frmAbout" Title="Про програму">
 			<Control ID="labelProductName">Mesen</Control>
-			<Control ID="labelCopyright">© 2019 M. Bibaud (aka Sour)</Control>
+			<Control ID="labelCopyright">© 2020 M. Bibaud (aka Sour)</Control>
 			<Control ID="lblWebsite">Сайт:</Control>
 			<Control ID="lblLink">www.mesen.ca</Control>
 			<Control ID="labelVersion">Версiя:</Control>
@@ -774,6 +772,7 @@
 		<Message ID="FilterMovie">Записи (*.mmo)|*.mmo|All Files (*.*)|*.*</Message>
 		<Message ID="FilterWave">Wave файли (*.wav)|*.wav|All Files (*.*)|*.*</Message>
 		<Message ID="FilterAvi">Avi файли (*.avi)|*.avi|All Files (*.*)|*.*</Message>
+		<Message ID="FilterGif">GIF files (*.gif)|*.gif|All Files (*.*)|*.*</Message>
 		<Message ID="FilterPalette">Файли палiтр (*.pal)|*.pal|All Files (*.*)|*.*</Message>
 		<Message ID="FilterRom">Всі підтримувані формати (*.nes, *.zip, *.7z, *.nsf, *.nsfe, *.fds, *.unf, *.unif, *.studybox)|*.NES;*.ZIP;*.7z;*.FDS;*.NSF;*.NSFE;*.UNF;*.UNIF;*.STUDYBOX|NES Roms (*.nes, *.unf, *.unif)|*.NES;*.UNF;*.UNIF|Famicom Disk System Roms (*.fds)|*.FDS|NSF files (*.nsf, *.nsfe)|*.nsf;*.nsfe|ZIP Archives (*.zip)|*.ZIP|7-Zip Archives (*.7z)|*.7z|All (*.*)|*.*</Message>
 		<Message ID="FilterRomIps">Всі підтримувані формати (*.nes, *.zip, *.7z, *.fds, *.nsf, *.nsfe, *.unf, *.unif, *.studybox, *.ips, *.bps, *.ups)|*.NES;*.ZIP;*.7z;*.IPS;*.BPS;*.UPS;*.FDS;*.NSF;*.NSFE;*.UNF;*.UNIF;*.STUDYBOX|NES Roms (*.nes, *.unf, *.unif)|*.NES;*.UNF;*.UNIF|Famicom Disk System Roms (*.fds)|*.FDS|NSF files (*.nsf, *.nsfe)|*.nsf;*.nsfe|ZIP Archives (*.zip)|*.ZIP|7-Zip Archives (*.7z)|*.7z|IPS/UPS/BPS Patches (*.ips, *.bps, *.ups)|*.IPS;*.BPS;*.UPS|All (*.*)|*.*</Message>
@@ -782,6 +781,12 @@
 		<Message ID="FilterSavestate">Mesen Savestates (*.mst)|*.mst|All Files (*.*)|*.*</Message>
 		<Message ID="FilterTapeFiles">Family Basic Tape files (*.fbt)|*.fbt|All Files (*.*)|*.*</Message>
 
+		<Message ID="LastSession">Last Session</Message>
+		<Message ID="AutoSave">Auto-save</Message>
+		<Message ID="SlotNumber">Slot #{0}</Message>
+		<Message ID="LoadStateDialog">Load State Menu</Message>
+		<Message ID="SaveStateDialog">Save State Menu</Message>
+		
 		<Message ID="LoadFromFile">Завантажитти з файлу...</Message>
 		<Message ID="SaveToFile">Зберегти в файл...</Message>
 
@@ -942,6 +947,7 @@
 		<Message ID="EmulatorShortcutMappings_SaveStateSlot9">Збереження стану - Слот 9</Message>
 		<Message ID="EmulatorShortcutMappings_SaveStateSlot10">Збереження стану - Слот 10</Message>
 		<Message ID="EmulatorShortcutMappings_SaveStateToFile">Зберегти стан в файл</Message>
+		<Message ID="EmulatorShortcutMappings_SaveStateDialog">Open Save State Menu</Message>
 		<Message ID="EmulatorShortcutMappings_LoadStateSlot1">Завантаження стану - Слот 1</Message>
 		<Message ID="EmulatorShortcutMappings_LoadStateSlot2">Завантаження стану - Слот 2</Message>
 		<Message ID="EmulatorShortcutMappings_LoadStateSlot3">Завантаження стану - Слот 3</Message>
@@ -954,6 +960,7 @@
 		<Message ID="EmulatorShortcutMappings_LoadStateSlot10">Завантаження стану - Слот 10</Message>
 		<Message ID="EmulatorShortcutMappings_LoadStateSlotAuto">Завантаження стану - Автозавантаження</Message>
 		<Message ID="EmulatorShortcutMappings_LoadStateFromFile">Завантажити стан з файлу</Message>
+		<Message ID="EmulatorShortcutMappings_LoadStateDialog">Open Load State Menu</Message>
 		<Message ID="EmulatorShortcutMappings_LoadLastSession">Завантажити останню сесію</Message>
 
 		<Message ID="EmulatorShortcutMappings_SelectSaveSlot1">Select Save Slot 1</Message>

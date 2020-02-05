@@ -761,7 +761,7 @@ void Console::Run()
 	try {
 		while(true) {
 			stringstream runAheadState;
-			bool useRunAhead = _settings->GetRunAheadFrames() > 0 && !_debugger && !_rewindManager->IsRewinding() && _settings->GetEmulationSpeed() > 0 && _settings->GetEmulationSpeed() <= 100;
+			bool useRunAhead = _settings->GetRunAheadFrames() > 0 && !_debugger && !IsNsf() && !_rewindManager->IsRewinding() && _settings->GetEmulationSpeed() > 0 && _settings->GetEmulationSpeed() <= 100;
 			if(useRunAhead) {
 				RunFrameWithRunAhead(runAheadState);
 			} else {
@@ -1049,6 +1049,15 @@ double Console::GetFrameDelay()
 	}
 
 	return frameDelay;
+}
+
+double Console::GetFps()
+{
+	if(_model == NesModel::NTSC) {
+		return _settings->CheckFlag(EmulationFlags::IntegerFpsMode) ? 60.0 : 60.098812;
+	} else {
+		return _settings->CheckFlag(EmulationFlags::IntegerFpsMode) ? 50.0 : 50.006978;
+	}
 }
 
 void Console::SaveState(ostream &saveStream)

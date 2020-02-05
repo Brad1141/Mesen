@@ -163,6 +163,15 @@ else ifeq ($(platform), vita)
    AR = arm-vita-eabi-ar
    CXXFLAGS += -Wl,-q -Wall -O3
   STATIC_LINKING = 1
+# Nintendo Switch (libnx)
+else ifeq ($(platform), libnx)
+   include $(DEVKITPRO)/libnx/switch_rules
+   TARGET := $(TARGET_NAME)_libretro_$(platform).a
+   DEFINES := -DSWITCH=1 -D__SWITCH__ -D_LARGEFILE_SOURCE -DHAVE_LIBNX -D__aarch64__
+   CFLAGS := $(DEFINES) -fPIE -I$(LIBNX)/include/ -ffunction-sections -fdata-sections -ftls-model=local-exec 
+   CFLAGS += -march=armv8-a -mtune=cortex-a57 -mtp=soft -mcpu=cortex-a57+crc+fp+simd -ffast-math
+   CXXFLAGS := $(ASFLAGS) $(CFLAGS)
+   STATIC_LINKING = 1
 # Windows MSVC 2017 all architectures
 else ifneq (,$(findstring windows_msvc2017,$(platform)))
 
@@ -297,6 +306,15 @@ else
   LD = $(CXX)
 endif
 
+CONFLICTING_NAMES=std_vorbis std_vorbis_close stb_vorbis_open_memory stb_vorbis_get_info \
+  stb_vorbis_seek stb_vorbis_get_samples_short_interleaved stb_vorbis_seek_start \
+  stb_vorbis_get_file_offset
+ifeq ($(STATIC_LINKING),1)
+  PREFIX_DEFINES := $(foreach name,$(CONFLICTING_NAMES),-D$(name)=core_$(name))
+  CFLAGS   += $(PREFIX_DEFINES)
+  CXXFLAGS += $(PREFIX_DEFINES)
+endif
+
 include Makefile.common
 
 OBJECTS := $(SOURCES_C:.c=.o) $(SOURCES_CXX:.cpp=.o)
@@ -312,7 +330,6 @@ CXXFLAGS += -D LIBRETRO $(fpic) -std=c++14
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	@echo "** BUILDING $(TARGET) FOR PLATFORM $(platform) **"
 ifeq ($(STATIC_LINKING), 1)
 ifneq (,$(findstring msvc,$(platform)))
 	$(LD) $(LINKOUT)$@ $(OBJECTS)
@@ -322,7 +339,6 @@ endif
 else
 	$(LD) $(fpic) $(SHARED) $(INCLUDES) $(LINKOUT)$@ $(OBJECTS) $(LDFLAGS)
 endif
-	@echo "** BUILD SUCCESSFUL! GG NO RE **"
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(fpic) -c $< $(OBJOUT)$@

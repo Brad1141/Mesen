@@ -104,6 +104,7 @@ namespace Mesen.GUI.Forms.Config
 				EmulatorShortcut.SaveStateSlot9,
 				EmulatorShortcut.SaveStateSlot10,
 				EmulatorShortcut.SaveStateToFile,
+				EmulatorShortcut.SaveStateDialog,
 
 				EmulatorShortcut.LoadStateSlot1,
 				EmulatorShortcut.LoadStateSlot2,
@@ -117,6 +118,7 @@ namespace Mesen.GUI.Forms.Config
 				EmulatorShortcut.LoadStateSlot10,
 				EmulatorShortcut.LoadStateSlotAuto,
 				EmulatorShortcut.LoadStateFromFile,
+				EmulatorShortcut.LoadStateDialog,
 
 				EmulatorShortcut.SelectSaveSlot1,
 				EmulatorShortcut.SelectSaveSlot2,
@@ -217,7 +219,7 @@ namespace Mesen.GUI.Forms.Config
 						CheckConflicts();
 					} else if(e.Button == MouseButtons.Left) {
 						using(frmGetKey frm = new frmGetKey(false)) {
-							frm.ShowDialog();
+							((Form)frm).ShowDialog(this);
 							button.Value = frm.ShortcutKey.ToString();
 							button.Tag = frm.ShortcutKey;
 

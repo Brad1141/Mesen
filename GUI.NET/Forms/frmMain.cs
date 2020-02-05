@@ -14,6 +14,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Xml;
 using Mesen.GUI.Config;
+using Mesen.GUI.Controls;
 using Mesen.GUI.Debugger;
 using Mesen.GUI.Forms.Cheats;
 using Mesen.GUI.Forms.Config;
@@ -24,75 +25,67 @@ using Mesen.GUI.Properties;
 
 namespace Mesen.GUI.Forms
 {
-   public partial class frmMain : BaseInputForm
-   {
-	  private InteropEmu.NotificationListener _notifListener;
-	  private Thread _emuThread;
-	  private frmLogWindow _logWindow;
-	  private frmCheatList _cheatListWindow;
-	  private frmHistoryViewer _historyViewerWindow;
-	  private frmHdPackEditor _hdPackEditorWindow;
-	  private ResourcePath? _currentRomPath = null;
+	public partial class frmMain : BaseInputForm
+	{
+		private InteropEmu.NotificationListener _notifListener;
+		private Thread _emuThread;
+		private frmLogWindow _logWindow;
+		private frmCheatList _cheatListWindow;
+		private frmHistoryViewer _historyViewerWindow;
+		private frmHdPackEditor _hdPackEditorWindow;
+		private ResourcePath? _currentRomPath = null;
 
-	  private string _movieToRecord = null;
-	  private List<string> _luaScriptsToLoad = new List<string>();
-	  private bool _loadLastSessionRequested = false;
+		private string _movieToRecord = null;
+		private List<string> _luaScriptsToLoad = new List<string>();
+		private bool _loadLastSessionRequested = false;
+		private bool _openDebuggerRequested = false;
 
-	  private Image _pauseButton = Resources.Pause;
-	  private Image _playButton = Resources.Play;
-	  private string _currentGame = null;
-	  private bool _customSize = false;
-	  private double? _switchOptionScale = null;
-	  private bool _fullscreenRequested = false;
-	  private FormWindowState _originalWindowState;
-	  private Size _originalWindowMinimumSize;
-	  private bool _fullscreenMode = false;
-	  private Size? _nonNsfSize = null;
-	  private Size _nonNsfMinimumSize;
-	  private bool _isNsfPlayerMode = false;
-	  private object _loadRomLock = new object();
-	  private int _romLoadCounter = 0;
-	  private bool _showUpgradeMessage = false;
-	  private float _yFactor = 1;
-	  private bool _enableResize = false;
-	  private bool _overrideWindowSize = false;
-	  private bool _shuttingDown = false;
-	  private bool _isDualSystem = false;
+		private Image _pauseButton = Resources.Pause;
+		private Image _playButton = Resources.Play;
+		private string _currentGame = null;
+		private bool _customSize = false;
+		private double? _switchOptionScale = null;
+		private bool _fullscreenRequested = false;
+		private FormWindowState _originalWindowState;
+		private Size _originalWindowMinimumSize;
+		private bool _fullscreenMode = false;
+		private Size? _nonNsfSize = null;
+		private Size _nonNsfMinimumSize;
+		private bool _isNsfPlayerMode = false;
+		private object _loadRomLock = new object();
+		private int _romLoadCounter = 0;
+		private bool _showUpgradeMessage = false;
+		private bool _enableResize = false;
+		private bool _overrideWindowSize = false;
+		private bool _shuttingDown = false;
+		private bool _isDualSystem = false;
 
-	  private frmFullscreenRenderer _frmFullscreenRenderer = null;
+		private frmFullscreenRenderer _frmFullscreenRenderer = null;
 
-	  private Dictionary<EmulatorShortcut, Func<bool>> _actionEnabledFuncs = new Dictionary<EmulatorShortcut, Func<bool>>();
+		private Dictionary<EmulatorShortcut, Func<bool>> _actionEnabledFuncs = new Dictionary<EmulatorShortcut, Func<bool>>();
 
-	  private string[] _commandLineArgs;
-	  private bool _noAudio = false;
-	  private bool _noVideo = false;
-	  private bool _noInput = false;
+		private string[] _commandLineArgs;
+		private bool _noAudio = false;
+		private bool _noVideo = false;
+		private bool _noInput = false;
 
-	  private PrivateFontCollection _fonts = new PrivateFontCollection();
+		public frmMain(string[] args)
+		{
+			ThemeHelper.InitTheme(this.BackColor);
+			InitializeComponent();
 
-	  public frmMain(string[] args)
-	  {
-		 ThemeHelper.InitTheme(this.BackColor);
-		 InitializeComponent();
+			ThemeHelper.ExcludeFromTheme(panelInfo);
+			ThemeHelper.ExcludeFromTheme(panelRenderer);
 
-		 ThemeHelper.ExcludeFromTheme(panelInfo);
-		 ThemeHelper.ExcludeFromTheme(panelRenderer);
+			this.StartPosition = FormStartPosition.CenterScreen;
 
-		 this.StartPosition = FormStartPosition.CenterScreen;
+			Version currentVersion = new Version(InteropEmu.GetMesenVersion());
+			lblVersion.Text = currentVersion.ToString();
 
-		 Version currentVersion = new Version(InteropEmu.GetMesenVersion());
-		 lblVersion.Text = currentVersion.ToString();
-
-		 if (!Program.IsMono)
-		 {
-			_fonts.AddFontFile(Path.Combine(ConfigManager.HomeFolder, "Resources", "PixelFont.ttf"));
-			lblVersion.Font = new Font(_fonts.Families[0], 10);
-		 }
-		 else
-		 {
-			lblVersion.Margin = new Padding(0, 0, 3, 0);
-			picIcon.Margin = new Padding(3, 5, 3, 3);
-		 }
+			if(Program.IsMono) {
+				lblVersion.Margin = new Padding(0, 0, 3, 0);
+				picIcon.Margin = new Padding(3, 5, 3, 3);
+			}
 
 #if AUTOBUILD
 			string devVersion = ResourceManager.ReadZippedResource("DevBuild.txt");
@@ -106,351 +99,305 @@ namespace Mesen.GUI.Forms
 			}
 #endif
 
-		 _commandLineArgs = (string[])args.Clone();
+			_commandLineArgs = (string[])args.Clone();
 
-		 Application.AddMessageFilter(this);
-		 this.Resize += ResizeRecentGames;
-		 this.FormClosed += (s, e) => Application.RemoveMessageFilter(this);
-	  }
-
-	  public void ProcessCommandLineArguments(List<string> switches, bool forStartup)
-	  {
-		 if (forStartup)
-		 {
-			_noVideo = switches.Contains("/novideo");
-			_noAudio = switches.Contains("/noaudio");
-			_noInput = switches.Contains("/noinput");
-		 }
-
-		 if (switches.Contains("/donotsavesettings"))
-		 {
-			ConfigManager.DoNotSaveSettings = true;
-		 }
-
-		 if (switches.Contains("/OpenDebugger"))
-		 {
-			ConfigManager.OpenDebugger = true;
-		 }
-
-		 if (switches.Contains("/loadlastsession"))
-		 {
-			_loadLastSessionRequested = true;
-		 }
-
-		 Regex recordMovieCommand = new Regex("/recordmovie=([^\"]+)");
-		 foreach (string command in switches)
-		 {
-			Match match = recordMovieCommand.Match(command);
-			if (match.Success)
-			{
-			   string moviePath = match.Groups[1].Value;
-			   string folder = Path.GetDirectoryName(moviePath);
-			   if (string.IsNullOrWhiteSpace(folder))
-			   {
-				  moviePath = Path.Combine(ConfigManager.MovieFolder, moviePath);
-			   }
-			   else if (!Path.IsPathRooted(moviePath))
-			   {
-				  moviePath = Path.Combine(Program.OriginalFolder, moviePath);
-			   }
-			   if (!moviePath.ToLower().EndsWith(".mmo"))
-			   {
-				  moviePath += ".mmo";
-			   }
-			   _movieToRecord = moviePath;
-			   break;
+			Application.AddMessageFilter(this);
+			this.Resize += ResizeRecentGames;
+			this.FormClosed += (s, e) => Application.RemoveMessageFilter(this);
+		}
+		
+		public void ProcessCommandLineArguments(List<string> switches, bool forStartup)
+		{
+			if(forStartup) {
+				_noVideo = switches.Contains("/novideo");
+				_noAudio = switches.Contains("/noaudio");
+				_noInput = switches.Contains("/noinput");
 			}
-		 }
 
-		 ConfigManager.ProcessSwitches(switches);
-	  }
-
-	  public void LoadGameFromCommandLine(List<string> switches)
-	  {
-		 string romPath;
-		 CommandLineHelper.GetRomPathFromCommandLine(switches, out romPath, out _luaScriptsToLoad);
-
-		 if (romPath != null)
-		 {
-			this.LoadFile(romPath);
-		 }
-		 else
-		 {
-			if (_emuThread == null)
-			{
-			   //When no ROM is loaded, only process Lua scripts if a ROM was specified as a command line param
-			   _luaScriptsToLoad.Clear();
-			   _movieToRecord = null;
-			   _loadLastSessionRequested = false;
+			if(switches.Contains("/donotsavesettings")) {
+				ConfigManager.DoNotSaveSettings = true;
 			}
-			else
-			{
-			   //No game was specified, but a game is running already, load the scripts right away
-			   ProcessPostLoadCommandSwitches();
+
+			if(switches.Contains("/loadlastsession")) {
+				_loadLastSessionRequested = true;
+			} else if(switches.Contains("/debugger")) {
+				_openDebuggerRequested = true;
 			}
-		 }
-	  }
 
-	  private void ProcessPostLoadCommandSwitches()
-	  {
-		 if (_luaScriptsToLoad.Count > 0)
-		 {
-			foreach (string luaScript in _luaScriptsToLoad)
-			{
-			   frmScript scriptWindow = DebugWindowManager.OpenScriptWindow(true);
-			   scriptWindow.LoadScriptFile(luaScript);
+			Regex recordMovieCommand = new Regex("/recordmovie=([^\"]+)");
+			foreach(string command in switches) {
+				Match match = recordMovieCommand.Match(command);
+				if(match.Success) {
+					string moviePath = match.Groups[1].Value;
+					string folder = Path.GetDirectoryName(moviePath);
+					if(string.IsNullOrWhiteSpace(folder)) {
+						moviePath = Path.Combine(ConfigManager.MovieFolder, moviePath);
+					} else if(!Path.IsPathRooted(moviePath)) {
+						moviePath = Path.Combine(Program.OriginalFolder, moviePath);
+					}
+					if(!moviePath.ToLower().EndsWith(".mmo")) {
+						moviePath += ".mmo";
+					}
+					_movieToRecord = moviePath;
+					break;
+				}
 			}
-			_luaScriptsToLoad.Clear();
-		 }
 
-		 if (_movieToRecord != null)
-		 {
-			if (InteropEmu.MovieRecording())
-			{
-			   InteropEmu.MovieStop();
+			ConfigManager.ProcessSwitches(switches);
+		}
+
+		public void LoadGameFromCommandLine(List<string> switches)
+		{
+			string romPath;
+			CommandLineHelper.GetRomPathFromCommandLine(switches, out romPath, out _luaScriptsToLoad);
+
+			if(romPath != null) {
+				this.LoadFile(romPath);
+			} else {
+				if(_emuThread == null) {
+					//When no ROM is loaded, only process Lua scripts if a ROM was specified as a command line param
+					_luaScriptsToLoad.Clear();
+					_movieToRecord = null;
+					_loadLastSessionRequested = false;
+				} else {
+					//No game was specified, but a game is running already, load the scripts right away
+					ProcessPostLoadCommandSwitches();
+				}
 			}
-			RecordMovieOptions options = new RecordMovieOptions(_movieToRecord, "", "", RecordMovieFrom.StartWithSaveData);
-			InteropEmu.MovieRecord(ref options);
-			_movieToRecord = null;
-		 }
+		}
 
-		 if (_loadLastSessionRequested)
-		 {
-			_loadLastSessionRequested = false;
-			LoadLastSession();
-		 }
-	  }
+		private void ProcessPostLoadCommandSwitches()
+		{
+			if(_luaScriptsToLoad.Count > 0) {
+				foreach(string luaScript in _luaScriptsToLoad) {
+					frmScript scriptWindow = DebugWindowManager.OpenScriptWindow(true);
+					scriptWindow.LoadScriptFile(luaScript);
+				}
+				_luaScriptsToLoad.Clear();
+			}
 
-	  protected override void OnLoad(EventArgs e)
-	  {
-		 ResourceHelper.LoadResources(ConfigManager.Config.PreferenceInfo.DisplayLanguage);
-		 ResourceHelper.UpdateEmuLanguage();
+			if(_movieToRecord != null) {
+				if(InteropEmu.MovieRecording()) {
+					InteropEmu.MovieStop();
+				}
+				RecordMovieOptions options = new RecordMovieOptions(_movieToRecord, "", "", RecordMovieFrom.StartWithSaveData);
+				InteropEmu.MovieRecord(ref options);
+				_movieToRecord = null;
+			}
 
-		 base.OnLoad(e);
+			if(_loadLastSessionRequested) {
+				_loadLastSessionRequested = false;
+				LoadLastSession();
+			}
+		}
+
+		protected override void OnLoad(EventArgs e)
+		{
+			ResourceHelper.LoadResources(ConfigManager.Config.PreferenceInfo.DisplayLanguage);
+			ResourceHelper.UpdateEmuLanguage();
+
+			base.OnLoad(e);
 
 #if HIDETESTMENU
 			mnuTests.Visible = false;
 #endif
-		 InteropEmu.InitDll();
+			InteropEmu.InitDll();
 
-		 _notifListener = new InteropEmu.NotificationListener(InteropEmu.ConsoleId.Master);
-		 _notifListener.OnNotification += _notifListener_OnNotification;
+			_notifListener = new InteropEmu.NotificationListener(InteropEmu.ConsoleId.Master);
+			_notifListener.OnNotification += _notifListener_OnNotification;
 
-		 menuTimer.Start();
+			menuTimer.Start();
 
-		 InteropEmu.ScreenSize originalSize = InteropEmu.GetScreenSize(false);
-		 VideoInfo.ApplyConfig();
-		 this.ProcessCommandLineArguments(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, true), true);
-		 VideoInfo.ApplyConfig();
-		 InteropEmu.ScreenSize newSize = InteropEmu.GetScreenSize(false);
-		 if (originalSize.Width != newSize.Width || originalSize.Height != newSize.Height)
-		 {
-			_overrideWindowSize = true;
-		 }
-
-		 InitializeEmulationSpeedMenu();
-
-		 UpdateVideoSettings();
-
-		 InitializeCore();
-		 PerformUpgrade();
-		 InitializeEmu();
-
-		 TopMost = ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
-
-		 UpdateMenus();
-		 UpdateRecentFiles();
-
-		 UpdateViewerSize();
-
-		 InitializeStateMenu(mnuSaveState, true);
-		 InitializeStateMenu(mnuLoadState, false);
-
-		 RestoreLocation(ConfigManager.Config.WindowLocation);
-
-		 if (ConfigManager.Config.PreferenceInfo.CloudSaveIntegration)
-		 {
-			Task.Run(() => CloudSyncHelper.Sync());
-		 }
-
-		 if (ConfigManager.Config.PreferenceInfo.AutomaticallyCheckForUpdates)
-		 {
-			CheckForUpdates(false);
-		 }
-
-		 if (ConfigManager.Config.WindowSize.HasValue && !_overrideWindowSize)
-		 {
-			this.ClientSize = ConfigManager.Config.WindowSize.Value;
-		 }
-
-		 mnuDebugDualSystemSecondaryCpu.Checked = ConfigManager.Config.DebugInfo.DebugConsoleId == InteropEmu.ConsoleId.Slave;
-		 InteropEmu.DebugSetDebuggerConsole(ConfigManager.Config.DebugInfo.DebugConsoleId);
-
-		 BaseForm.StartBackgroundTimer();
-	  }
-
-	  private void ProcessFullscreenSwitch(List<string> switches)
-	  {
-		 if (switches.Contains("/fullscreen"))
-		 {
-			double scale = ConfigManager.Config.VideoInfo.VideoScale;
-			if (!ConfigManager.Config.VideoInfo.UseExclusiveFullscreen)
-			{
-			   //Go into fullscreen mode right away
-			   SetFullscreenState(true);
+			InteropEmu.ScreenSize originalSize = InteropEmu.GetScreenSize(false);
+			VideoInfo.ApplyConfig();
+			this.ProcessCommandLineArguments(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, true), true);
+			VideoInfo.ApplyConfig();
+			InteropEmu.ScreenSize newSize = InteropEmu.GetScreenSize(false);
+			if(originalSize.Width != newSize.Width || originalSize.Height != newSize.Height) {
+				_overrideWindowSize = true;
 			}
 
-			_fullscreenRequested = true;
-			foreach (string option in switches)
-			{
-			   if (option.StartsWith("/videoscale="))
-			   {
-				  _switchOptionScale = scale;
-			   }
+			InitializeEmulationSpeedMenu();
+
+			UpdateVideoSettings();
+
+			InitializeCore();
+			PerformUpgrade();
+			InitializeEmu();
+
+			TopMost = ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
+
+			UpdateMenus();
+			UpdateRecentFiles();
+
+			UpdateViewerSize();
+
+			InitializeStateMenu(mnuSaveState, true);
+			InitializeStateMenu(mnuLoadState, false);
+
+			RestoreLocation(ConfigManager.Config.WindowLocation);
+
+			if(ConfigManager.Config.PreferenceInfo.CloudSaveIntegration) {
+				Task.Run(() => CloudSyncHelper.Sync());
 			}
-		 }
-	  }
 
-	  protected override void OnShown(EventArgs e)
-	  {
-		 base.OnShown(e);
+			if(ConfigManager.Config.PreferenceInfo.AutomaticallyCheckForUpdates) {
+				CheckForUpdates(false);
+			}
 
-		 if (ConfigManager.Config.PreferenceInfo.DisableMouseResize)
-		 {
-			//This must be in the OnShown event, otherwise the application won't show up in the taskbar until it is given focus
-			this.FormBorderStyle = FormBorderStyle.Fixed3D;
-		 }
+			if(ConfigManager.Config.WindowSize.HasValue && !_overrideWindowSize) {
+				this.ClientSize = ConfigManager.Config.WindowSize.Value;
+			}
+			
+			mnuDebugDualSystemSecondaryCpu.Checked = ConfigManager.Config.DebugInfo.DebugConsoleId == InteropEmu.ConsoleId.Slave;
+			InteropEmu.DebugSetDebuggerConsole(ConfigManager.Config.DebugInfo.DebugConsoleId);
 
-		 this.BindShortcuts();
+			BaseForm.StartBackgroundTimer();
+		}
 
-		 if (ConfigManager.Config.WindowSize.HasValue && !_overrideWindowSize)
-		 {
-			this.Size = ConfigManager.Config.WindowSize.Value;
-		 }
+		private void ProcessFullscreenSwitch(List<string> switches)
+		{
+			if(switches.Contains("/fullscreen")) {
+				double scale = ConfigManager.Config.VideoInfo.VideoScale;
+				if(!ConfigManager.Config.VideoInfo.UseExclusiveFullscreen) {
+					//Go into fullscreen mode right away
+					SetFullscreenState(true);
+				}
 
-		 this.LoadGameFromCommandLine(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, false));
+				_fullscreenRequested = true;
+				foreach(string option in switches) {
+					if(option.StartsWith("/videoscale=")) {
+						_switchOptionScale = scale;
+					}
+				}
+			}
+		}
 
-		 this.menuStrip.VisibleChanged += new System.EventHandler(this.menuStrip_VisibleChanged);
-		 this.UpdateRendererLocation();
+		protected override void OnShown(EventArgs e)
+		{
+			base.OnShown(e);
 
-		 if (_showUpgradeMessage)
-		 {
-			MesenMsgBox.Show("UpgradeSuccess", MessageBoxButtons.OK, MessageBoxIcon.Information);
-			_showUpgradeMessage = false;
-		 }
+			if(ConfigManager.Config.PreferenceInfo.DisableMouseResize) {
+				//This must be in the OnShown event, otherwise the application won't show up in the taskbar until it is given focus
+				this.FormBorderStyle = FormBorderStyle.Fixed3D;
+			}
 
-		 //Ensure the resize event is not fired until the form is fully shown
-		 //This is needed when DPI display settings is not set to 100%
-		 _enableResize = true;
+			this.BindShortcuts();
 
-		 ProcessFullscreenSwitch(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, true));
-	  }
+			if(ConfigManager.Config.WindowSize.HasValue && !_overrideWindowSize) {
+				this.Size = ConfigManager.Config.WindowSize.Value;
+			}
 
-	  protected override void OnClosing(CancelEventArgs e)
-	  {
-		 if (ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower && MesenMsgBox.Show("ConfirmExit", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
-		 {
-			e.Cancel = true;
-			return;
-		 }
+			this.LoadGameFromCommandLine(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, false));
 
-		 if (!_shuttingDown && Program.IsMono)
-		 {
-			//This appears to prevent Mono from locking up when closing the form
-			Task.Run(() =>
-			{
-			   StopEmu();
-			   _shuttingDown = true;
-			   this.BeginInvoke((Action)(() => this.Close()));
-			});
-			e.Cancel = true;
-			return;
-		 }
+			this.menuStrip.VisibleChanged += new System.EventHandler(this.menuStrip_VisibleChanged);
+			this.UpdateRendererLocation();
 
-		 _shuttingDown = true;
-		 CursorManager.StopTimers();
-		 BaseForm.StopBackgroundTimer();
-		 _logWindow?.Close();
-		 _historyViewerWindow?.Close();
-		 _cheatListWindow?.Close();
-		 _hdPackEditorWindow?.Close();
-		 _frmFullscreenRenderer?.Close();
+			if(_showUpgradeMessage) {
+				MesenMsgBox.Show("UpgradeSuccess", MessageBoxButtons.OK, MessageBoxIcon.Information);
+				_showUpgradeMessage = false;
+			}
+
+			//Ensure the resize event is not fired until the form is fully shown
+			//This is needed when DPI display settings is not set to 100%
+			_enableResize = true;
 
 			ProcessFullscreenSwitch(CommandLineHelper.PreprocessCommandLineArguments(_commandLineArgs, true));
 
-			ctrlRecentGames.Initialize();
-			ctrlRecentGames.Visible = _emuThread == null;
+			if(_emuThread == null) {
+				ShowRecentGames();
+			}
 		}
 
-		 if (_notifListener != null)
-		 {
-			_notifListener.Dispose();
-			_notifListener = null;
-		 }
+		protected override void OnClosing(CancelEventArgs e)
+		{
+			if(ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower && MesenMsgBox.Show("ConfirmExit", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK) {
+				e.Cancel = true;
+				return;
+			}
 
-		 this.Resize -= frmMain_Resize;
+			if(!_shuttingDown && Program.IsMono) {
+				//This appears to prevent Mono from locking up when closing the form
+				Task.Run(() => {
+					StopEmu();
+					_shuttingDown = true;
+					this.BeginInvoke((Action)(() => this.Close()));
+				});
+				e.Cancel = true;
+				return;
+			}
 
-		 DebugWindowManager.CloseAll();
+			_shuttingDown = true;
+			CursorManager.StopTimers();
+			BaseForm.StopBackgroundTimer();
+			_logWindow?.Close();
+			_historyViewerWindow?.Close();
+			_cheatListWindow?.Close();
+			_hdPackEditorWindow?.Close();
+			_frmFullscreenRenderer?.Close();
 
-		 ConfigManager.Config.EmulationInfo.EmulationSpeed = InteropEmu.GetEmulationSpeed();
-		 ConfigManager.Config.WindowLocation = this.WindowState == FormWindowState.Normal ? this.Location : this.RestoreBounds.Location;
-		 ConfigManager.Config.WindowSize = this.WindowState == FormWindowState.Normal ? this.Size : this.RestoreBounds.Size;
+			//Stop menu update timer, and process all pending events before stopping the core
+			//This prevents some rare crashes on shutdown
+			menuTimer.Stop();
+			Application.DoEvents();
 
-		 if (this._nonNsfSize.HasValue)
-		 {
-			ConfigManager.Config.WindowSize = this._nonNsfSize.Value;
-		 }
+			if(_notifListener != null) {
+				_notifListener.Dispose();
+				_notifListener = null;
+			}
 
-		 ConfigManager.ApplyChanges();
+			this.Resize -= frmMain_Resize;
 
-		 StopEmu();
+			DebugWindowManager.CloseAll();
 
-		 if (ConfigManager.Config.PreferenceInfo.CloudSaveIntegration)
-		 {
-			CloudSyncHelper.Sync();
-		 }
+			ConfigManager.Config.EmulationInfo.EmulationSpeed = InteropEmu.GetEmulationSpeed();
+			ConfigManager.Config.WindowLocation = this.WindowState == FormWindowState.Normal ? this.Location : this.RestoreBounds.Location;
+			ConfigManager.Config.WindowSize = this.WindowState == FormWindowState.Normal ? this.Size : this.RestoreBounds.Size;
 
-		 InteropEmu.Release();
+			if(this._nonNsfSize.HasValue) {
+				ConfigManager.Config.WindowSize = this._nonNsfSize.Value;
+			}
 
-		 ConfigManager.SaveConfig();
+			ConfigManager.ApplyChanges();
 
-		 base.OnClosing(e);
-	  }
+			StopEmu();
 
-	  private void menuTimer_Tick(object sender, EventArgs e)
-	  {
-		 this.UpdateMenus();
-	  }
+			if(ConfigManager.Config.PreferenceInfo.CloudSaveIntegration) {
+				CloudSyncHelper.Sync();
+			}
 
-	  void InitializeCore()
-	  {
-		 InteropEmu.InitializeEmu(ConfigManager.HomeFolder, this.Handle, ctrlRenderer.Handle, _noAudio, _noVideo, _noInput);
-	  }
+			InteropEmu.Release();
 
-	  void InitializeEmu()
-	  {
-		 if (ConfigManager.Config.PreferenceInfo.OverrideGameFolder && Directory.Exists(ConfigManager.Config.PreferenceInfo.GameFolder))
-		 {
-			InteropEmu.AddKnownGameFolder(ConfigManager.Config.PreferenceInfo.GameFolder);
-		 }
-		 foreach (RecentItem recentItem in ConfigManager.Config.RecentFiles)
-		 {
-			InteropEmu.AddKnownGameFolder(recentItem.RomFile.Folder);
-		 }
+			ConfigManager.SaveConfig();
 
-		 ConfigManager.Config.InitializeDefaults();
-		 ConfigManager.ApplyChanges();
-		 ConfigManager.Config.ApplyConfig();
+			base.OnClosing(e);
+		}
 
-		 UpdateEmulationFlags();
-	  }
+		private void menuTimer_Tick(object sender, EventArgs e)
+		{
+			this.UpdateMenus();
+		}
 
-	  private void UpdateViewerSize(bool forceUpdate = false)
-	  {
-		 this.Resize -= frmMain_Resize;
+		void InitializeCore()
+		{
+			InteropEmu.InitializeEmu(ConfigManager.HomeFolder, this.Handle, ctrlRenderer.Handle, _noAudio, _noVideo, _noInput);
+		}
 
-		 InteropEmu.ScreenSize size = InteropEmu.GetScreenSize(false);
+		void InitializeEmu()
+		{
+			if(ConfigManager.Config.PreferenceInfo.OverrideGameFolder && Directory.Exists(ConfigManager.Config.PreferenceInfo.GameFolder)) {
+				InteropEmu.AddKnownGameFolder(ConfigManager.Config.PreferenceInfo.GameFolder);
+			}
+			foreach(RecentItem recentItem in ConfigManager.Config.RecentFiles) {
+				InteropEmu.AddKnownGameFolder(recentItem.RomFile.Folder);
+			}
 
+			ConfigManager.Config.InitializeDefaults();
+			ConfigManager.ApplyChanges();
+			ConfigManager.Config.ApplyConfig();
+
+			UpdateEmulationFlags();
+		}
 
 		private void UpdateViewerSize(bool forceUpdate = false)
 		{
@@ -460,96 +407,20 @@ namespace Mesen.GUI.Forms
 
 			this.Resize -= frmMain_Resize;
 
-			bool doubleScreenMode = _isDualSystem && ConfigManager.Config.PreferenceInfo.VsDualVideoOutput == VsDualOutputOption.Both;
-			int width = doubleScreenMode ? (size.Width * 2) : size.Width;
+			InteropEmu.ScreenSize size = InteropEmu.GetScreenSize(false);
 
-			UpdateScaleMenu(size.Scale);
-			this.ClientSize = new Size(Math.Max(this.MinimumSize.Width - sizeGap.Width, width), Math.Max(this.MinimumSize.Height - sizeGap.Height, size.Height + (this.HideMenuStrip ? 0 : menuStrip.Height)));
-		 }
+			if(forceUpdate || (!_customSize && this.WindowState != FormWindowState.Maximized)) {
+				Size sizeGap = this.Size - this.ClientSize;
 
-		 ctrlRenderer.Size = new Size(size.Width, size.Height);
-		 UpdateRendererPosition();
+				bool doubleScreenMode = _isDualSystem && ConfigManager.Config.PreferenceInfo.VsDualVideoOutput == VsDualOutputOption.Both;
+				int width = doubleScreenMode ? (size.Width * 2) : size.Width;
 
-		 if (this.HideMenuStrip)
-		 {
-			this.menuStrip.Visible = false;
-		 }
-
-		 this.Resize += frmMain_Resize;
-	  }
-
-	  private void UpdateRendererPosition()
-	  {
-		 ctrlRenderer.Top = (panelRenderer.Height - ctrlRenderer.Height) / 2;
-
-		 if (_isDualSystem)
-		 {
-			UpdateDualSystemViewer();
-		 }
-		 else
-		 {
-			ctrlRenderer.Left = (panelRenderer.Width - ctrlRenderer.Width) / 2;
-			ctrlRendererDualSystem.Visible = false;
-		 }
-	  }
-
-	  private void UpdateDualSystemViewer()
-	  {
-		 ctrlRendererDualSystem.Size = new Size(ctrlRenderer.Width, ctrlRenderer.Height);
-		 ctrlRendererDualSystem.Top = (panelRenderer.Height - ctrlRenderer.Height) / 2;
-
-		 if (ConfigManager.Config.PreferenceInfo.VsDualVideoOutput == VsDualOutputOption.Both)
-		 {
-			ctrlRenderer.Left = (panelRenderer.Width / 2 - ctrlRenderer.Width) / 2;
-			ctrlRendererDualSystem.Left = ctrlRenderer.Left + ctrlRenderer.Width;
-
-			ctrlRendererDualSystem.Visible = true;
-		 }
-		 else
-		 {
-			ctrlRenderer.Left = (panelRenderer.Width - ctrlRenderer.Width) / 2;
-			ctrlRendererDualSystem.Left = (panelRenderer.Width - ctrlRenderer.Width) / 2;
-
-			if (ConfigManager.Config.PreferenceInfo.VsDualVideoOutput == VsDualOutputOption.SlaveOnly)
-			{
-			   ctrlRendererDualSystem.Visible = true;
-			   ctrlRendererDualSystem.BringToFront();
+				UpdateScaleMenu(size.Scale);
+				this.ClientSize = new Size(Math.Max(this.MinimumSize.Width - sizeGap.Width, width), Math.Max(this.MinimumSize.Height - sizeGap.Height, size.Height + (this.HideMenuStrip ? 0 : menuStrip.Height)));
 			}
-			else
-			{
-			   ctrlRendererDualSystem.Visible = false;
-			}
-		 }
-	  }
 
-	  protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
-	  {
-		 _yFactor = factor.Height;
-		 base.ScaleControl(factor, specified);
-	  }
-
-	  private void ResizeRecentGames(object sender, EventArgs e)
-	  {
-		 if (this.ClientSize.Height < 400 * _yFactor)
-		 {
-			ctrlRecentGames.Height = this.ClientSize.Height - (int)((125 - Math.Min(50, 400 - (int)(this.ClientSize.Height / _yFactor))) * _yFactor);
-		 }
-		 else
-		 {
-			ctrlRecentGames.Height = this.ClientSize.Height - (int)(125 * _yFactor);
-		 }
-		 ctrlRecentGames.Width = this.ClientSize.Width;
-		 ctrlRecentGames.Top = (this.HideMenuStrip && this.menuStrip.Visible) ? -menuStrip.Height : 0;
-	  }
-
-	  private void frmMain_Resize(object sender, EventArgs e)
-	  {
-		 if (_enableResize && this.WindowState != FormWindowState.Minimized)
-		 {
-			SetScaleBasedOnWindowSize();
+			ctrlRenderer.Size = new Size(size.Width, size.Height);
 			UpdateRendererPosition();
-		 }
-	  }
 
 			if(this.HideMenuStrip) {
 				this.menuStrip.Visible = false;
@@ -593,15 +464,15 @@ namespace Mesen.GUI.Forms
 			}
 		}
 
-		protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
-		{
-			_yFactor = factor.Height;
-			base.ScaleControl(factor, specified);
-		}
-
 		private void ResizeRecentGames(object sender, EventArgs e)
 		{
+			ctrlRecentGames.Height = this.ClientSize.Height - ctrlRecentGames.Top - (ctrlRecentGames.Mode == GameScreenMode.RecentGames ? 25 : 0);
+		}
+
+		private void ShowRecentGames()
+		{
 			ctrlRecentGames.Height = this.ClientSize.Height - ctrlRecentGames.Top - 25;
+			ctrlRecentGames.ShowScreen(GameScreenMode.RecentGames);
 		}
 
 		private void frmMain_Resize(object sender, EventArgs e)
@@ -722,73 +593,70 @@ namespace Mesen.GUI.Forms
 				enabled = false;
 			}
 
-			if (shortcut != null && !shortcut.KeyCombination.IsEmpty)
-			{
-			   InteropEmu.SetPauseScreenMessage(ResourceHelper.GetMessage("PressToExitFullscreen", shortcut.KeyCombination.ToString()));
+			if(_fullscreenMode == enabled) {
+				//Fullscreen mode already matches, no need to do anything
+				return;
 			}
-		 }
 
-		 bool saveState = !_fullscreenMode;
-		 _fullscreenMode = enabled;
-		 mnuFullscreen.Checked = enabled;
+			//Setup message to show on screen when paused while in fullscreen (instructions to revert to windowed mode)
+			InteropEmu.SetPauseScreenMessage("");
+			if(enabled) {
+				ShortcutKeyInfo shortcut = ConfigManager.Config.PreferenceInfo.ShortcutKeys1.Find(ski => ski.Shortcut == EmulatorShortcut.ToggleFullscreen);
+				if(shortcut == null || shortcut.KeyCombination.IsEmpty) {
+					shortcut = ConfigManager.Config.PreferenceInfo.ShortcutKeys2.Find(ski => ski.Shortcut == EmulatorShortcut.ToggleFullscreen);
+				}
 
-		 if (ConfigManager.Config.VideoInfo.UseExclusiveFullscreen)
-		 {
-			if (_emuThread != null)
-			{
-			   if (enabled)
-			   {
-				  StartExclusiveFullscreenMode();
-			   }
-			   else
-			   {
-				  StopExclusiveFullscreenMode();
-			   }
+				if(shortcut != null && !shortcut.KeyCombination.IsEmpty) {
+					InteropEmu.SetPauseScreenMessage(ResourceHelper.GetMessage("PressToExitFullscreen", shortcut.KeyCombination.ToString()));
+				}
 			}
-		 }
-		 else
-		 {
-			this.Resize -= frmMain_Resize;
-			if (enabled)
-			{
-			   StartFullscreenWindowMode(saveState);
-			}
-			else
-			{
-			   StopFullscreenWindowMode();
-			}
-			this.Resize += frmMain_Resize;
-			UpdateViewerSize();
-		 }
-	  }
 
-	  private bool HideMenuStrip
-	  {
-		 get
-		 {
-			return (_fullscreenMode && !ConfigManager.Config.VideoInfo.UseExclusiveFullscreen) || ConfigManager.Config.PreferenceInfo.AutoHideMenu;
-		 }
-	  }
+			bool saveState = !_fullscreenMode;
+			_fullscreenMode = enabled;
+			mnuFullscreen.Checked = enabled;
 
-	  private void ctrlRenderer_MouseMove(object sender, MouseEventArgs e)
-	  {
-		 if (sender != this.ctrlRecentGames)
-		 {
-			CursorManager.OnMouseMove((Control)sender);
-		 }
+			if(ConfigManager.Config.VideoInfo.UseExclusiveFullscreen) {
+				if(_emuThread != null) {
+					if(enabled) {
+						StartExclusiveFullscreenMode();
+					} else {
+						StopExclusiveFullscreenMode();
+					}
+				}
+			} else {
+				this.Resize -= frmMain_Resize;
+				if(enabled) {
+					StartFullscreenWindowMode(saveState);
+				} else {
+					StopFullscreenWindowMode();
+				}
+				this.Resize += frmMain_Resize;
+				UpdateViewerSize();
+			}
+		}
 
-		 if (this.HideMenuStrip && !this.menuStrip.ContainsFocus)
-		 {
-			if (sender == ctrlRenderer)
+		private bool HideMenuStrip
+		{
+			get
 			{
-			   this.menuStrip.Visible = ctrlRenderer.Top + e.Y < 30;
+				return (_fullscreenMode && !ConfigManager.Config.VideoInfo.UseExclusiveFullscreen) || ConfigManager.Config.PreferenceInfo.AutoHideMenu;
 			}
-			else
-			{
-			   this.menuStrip.Visible = e.Y < 30;
+		}
+
+		private void ctrlRenderer_MouseMove(object sender, MouseEventArgs e)
+		{
+			if(sender != this.ctrlRecentGames) {
+				CursorManager.OnMouseMove((Control)sender);
 			}
-		 }
-	  }
+
+			if(this.HideMenuStrip && !this.menuStrip.ContainsFocus) {
+				if(sender == ctrlRenderer) {
+					this.menuStrip.Visible = ctrlRenderer.Top + e.Y < 30;
+				} else {
+					this.menuStrip.Visible = e.Y < 30;
+				}
+			}
+		}
 
 		private void ctrlRenderer_MouseClick(object sender, MouseEventArgs e)
 		{
@@ -814,6 +682,11 @@ namespace Mesen.GUI.Forms
 						this.Invoke((MethodInvoker)(() => {
 							this.ShowGameConfig();
 						}));
+					}
+
+					if(_openDebuggerRequested) {
+						InteropEmu.DebugPpuStep(1);
+						_openDebuggerRequested = false;
 					}
 
 					this.StartEmuThread();
@@ -843,7 +716,7 @@ namespace Mesen.GUI.Forms
 				case InteropEmu.ConsoleNotificationType.EmulationStopped:
 					InitializeNsfMode();
 					this.BeginInvoke((Action)(() => {
-						ctrlRecentGames.Visible = true;
+						ShowRecentGames();
 					}));
 					break;
 
@@ -854,10 +727,6 @@ namespace Mesen.GUI.Forms
 							_hdPackEditorWindow.Close();
 						}
 						if(e.Parameter == IntPtr.Zero) {
-							if(!ConfigManager.Config.PreferenceInfo.DisableGameSelectionScreen) {
-								ctrlRecentGames.Initialize();
-							}
-
 							//We are completely stopping the emulation, close fullscreen mode
 							StopExclusiveFullscreenMode();
 						}
@@ -918,7 +787,7 @@ namespace Mesen.GUI.Forms
 					}));
 					break;
 			}
-		 };
+
 			if(e.NotificationType != InteropEmu.ConsoleNotificationType.PpuFrameDone) {
 				UpdateMenus();
 			}
@@ -1003,7 +872,6 @@ namespace Mesen.GUI.Forms
 			BindShortcut(mnuTakeScreenshot, EmulatorShortcut.TakeScreenshot, runningNotNsf);
 			BindShortcut(mnuRandomGame, EmulatorShortcut.LoadRandomGame);
 
-			mnuDebugDebugger.InitShortcut(this, nameof(DebuggerShortcutsConfig.OpenDebugger));
 			mnuDebugger.InitShortcut(this, nameof(DebuggerShortcutsConfig.OpenDebugger));
 			mnuApuViewer.InitShortcut(this, nameof(DebuggerShortcutsConfig.OpenApuViewer));
 			mnuAssembler.InitShortcut(this, nameof(DebuggerShortcutsConfig.OpenAssembler));
@@ -1030,231 +898,250 @@ namespace Mesen.GUI.Forms
 				}
 			};
 
-			updateShortcut();
+			_actionEnabledFuncs[shortcut] = isActionEnabled;
 
-			//Update item shortcut text when its parent opens
-			((ToolStripMenuItem)item.OwnerItem).DropDownOpening += (object sender, EventArgs e) => { updateShortcut(); };
-		 }
-	  }
+			if(item.OwnerItem is ToolStripMenuItem) {
+				Action updateShortcut = () => {
+					int keyIndex = ConfigManager.Config.PreferenceInfo.ShortcutKeys1.FindIndex((ShortcutKeyInfo shortcutInfo) => shortcutInfo.Shortcut == shortcut);
+					if(keyIndex >= 0) {
+						item.ShortcutKeyDisplayString = ConfigManager.Config.PreferenceInfo.ShortcutKeys1[keyIndex].KeyCombination.ToString();
+					} else {
+						keyIndex = ConfigManager.Config.PreferenceInfo.ShortcutKeys2.FindIndex((ShortcutKeyInfo shortcutInfo) => shortcutInfo.Shortcut == shortcut);
+						if(keyIndex >= 0) {
+							item.ShortcutKeyDisplayString = ConfigManager.Config.PreferenceInfo.ShortcutKeys2[keyIndex].KeyCombination.ToString();
+						} else {
+							item.ShortcutKeyDisplayString = "";
+						}
+					}
+					item.Enabled = isActionEnabled == null || isActionEnabled();
+				};
 
-	  private void ExecuteShortcut(EmulatorShortcut shortcut)
-	  {
-		 Func<bool> isActionEnabled;
-		 if (_actionEnabledFuncs.TryGetValue(shortcut, out isActionEnabled))
-		 {
-			isActionEnabled = _actionEnabledFuncs[shortcut];
-			if (isActionEnabled != null && !isActionEnabled())
-			{
-			   //Action disabled
-			   return;
+				updateShortcut();
+
+				//Update item shortcut text when its parent opens
+				((ToolStripMenuItem)item.OwnerItem).DropDownOpening += (object sender, EventArgs e) => { updateShortcut(); };
 			}
-		 }
+		}
 
-		 bool restoreFullscreen = _frmFullscreenRenderer != null;
-
-		 switch (shortcut)
-		 {
-			case EmulatorShortcut.Pause: PauseEmu(); break;
-			case EmulatorShortcut.Reset: this.ResetEmu(); break;
-			case EmulatorShortcut.PowerCycle: this.PowerCycleEmu(); break;
-			case EmulatorShortcut.ReloadRom: InteropEmu.ReloadRom(); break;
-			case EmulatorShortcut.PowerOff: Task.Run(() => InteropEmu.Stop()); break;
-			case EmulatorShortcut.Exit: this.Close(); break;
-
-			case EmulatorShortcut.ToggleCheats: ToggleCheats(); break;
-			case EmulatorShortcut.ToggleAudio: ToggleAudio(); break;
-			case EmulatorShortcut.ToggleFps: ToggleFps(); break;
-			case EmulatorShortcut.ToggleBackground: ToggleBackground(); break;
-			case EmulatorShortcut.ToggleSprites: ToggleSprites(); break;
-			case EmulatorShortcut.ToggleGameTimer: ToggleGameTimer(); break;
-			case EmulatorShortcut.ToggleFrameCounter: ToggleFrameCounter(); break;
-			case EmulatorShortcut.ToggleLagCounter: ToggleLagCounter(); break;
-			case EmulatorShortcut.ToggleOsd: ToggleOsd(); break;
-			case EmulatorShortcut.ToggleAlwaysOnTop: ToggleAlwaysOnTop(); break;
-			case EmulatorShortcut.ToggleDebugInfo: ToggleDebugInfo(); break;
-			case EmulatorShortcut.MaxSpeed: ToggleMaxSpeed(); break;
-			case EmulatorShortcut.ToggleFullscreen: ToggleFullscreen(); restoreFullscreen = false; break;
-
-			case EmulatorShortcut.OpenFile: OpenFile(); break;
-			case EmulatorShortcut.IncreaseSpeed: InteropEmu.IncreaseEmulationSpeed(); break;
-			case EmulatorShortcut.DecreaseSpeed: InteropEmu.DecreaseEmulationSpeed(); break;
-			case EmulatorShortcut.SwitchDiskSide: InteropEmu.FdsSwitchDiskSide(); break;
-			case EmulatorShortcut.EjectDisk: InteropEmu.FdsEjectDisk(); break;
-
-			case EmulatorShortcut.SetScale1x: SetScale(1); break;
-			case EmulatorShortcut.SetScale2x: SetScale(2); break;
-			case EmulatorShortcut.SetScale3x: SetScale(3); break;
-			case EmulatorShortcut.SetScale4x: SetScale(4); break;
-			case EmulatorShortcut.SetScale5x: SetScale(5); break;
-			case EmulatorShortcut.SetScale6x: SetScale(6); break;
-
-			case EmulatorShortcut.InsertCoin1: InteropEmu.VsInsertCoin(0); break;
-			case EmulatorShortcut.InsertCoin2: InteropEmu.VsInsertCoin(1); break;
-			case EmulatorShortcut.InsertCoin3: InteropEmu.VsInsertCoin(2); break;
-			case EmulatorShortcut.InsertCoin4: InteropEmu.VsInsertCoin(3); break;
-
-			case EmulatorShortcut.InputBarcode:
-			   using (frmInputBarcode frm = new frmInputBarcode())
-			   {
-				  frm.ShowDialog(this, this);
-			   }
-			   break;
-
-			case EmulatorShortcut.TakeScreenshot: InteropEmu.TakeScreenshot(); break;
-			case EmulatorShortcut.LoadRandomGame: LoadRandomGame(); break;
-
-			case EmulatorShortcut.LoadStateFromFile: LoadStateFromFile(); break;
-			case EmulatorShortcut.SaveStateToFile: SaveStateToFile(); break;
-
-			case EmulatorShortcut.SaveStateSlot1: SaveState(1); break;
-			case EmulatorShortcut.SaveStateSlot2: SaveState(2); break;
-			case EmulatorShortcut.SaveStateSlot3: SaveState(3); break;
-			case EmulatorShortcut.SaveStateSlot4: SaveState(4); break;
-			case EmulatorShortcut.SaveStateSlot5: SaveState(5); break;
-			case EmulatorShortcut.SaveStateSlot6: SaveState(6); break;
-			case EmulatorShortcut.SaveStateSlot7: SaveState(7); break;
-			case EmulatorShortcut.SaveStateSlot8: SaveState(8); break;
-			case EmulatorShortcut.SaveStateSlot9: SaveState(9); break;
-			case EmulatorShortcut.SaveStateSlot10: SaveState(10); break;
-			case EmulatorShortcut.LoadStateSlot1: LoadState(1); break;
-			case EmulatorShortcut.LoadStateSlot2: LoadState(2); break;
-			case EmulatorShortcut.LoadStateSlot3: LoadState(3); break;
-			case EmulatorShortcut.LoadStateSlot4: LoadState(4); break;
-			case EmulatorShortcut.LoadStateSlot5: LoadState(5); break;
-			case EmulatorShortcut.LoadStateSlot6: LoadState(6); break;
-			case EmulatorShortcut.LoadStateSlot7: LoadState(7); break;
-			case EmulatorShortcut.LoadStateSlot8: LoadState(8); break;
-			case EmulatorShortcut.LoadStateSlot9: LoadState(9); break;
-			case EmulatorShortcut.LoadStateSlot10: LoadState(10); break;
-			case EmulatorShortcut.LoadStateSlotAuto: LoadState(11); break;
-
-			case EmulatorShortcut.LoadLastSession: LoadLastSession(); break;
-		 }
-
-		 if (restoreFullscreen && _frmFullscreenRenderer == null && !_shuttingDown)
-		 {
-			//Need to restore fullscreen mode after showing a dialog
-			this.SetFullscreenState(true);
-		 }
-	  }
-
-	  private void ToggleFullscreen()
-	  {
-		 SetFullscreenState(!_fullscreenMode);
-	  }
-
-	  private void ToggleMaxSpeed()
-	  {
-		 if (ConfigManager.Config.EmulationInfo.EmulationSpeed == 0)
-		 {
-			SetEmulationSpeed(100);
-		 }
-		 else
-		 {
-			SetEmulationSpeed(0);
-		 }
-	  }
-
-	  private void ToggleFps()
-	  {
-		 mnuShowFPS.Checked = !mnuShowFPS.Checked;
-		 UpdateEmulationFlags();
-	  }
-
-	  private void ToggleAudio()
-	  {
-		 ConfigManager.Config.AudioInfo.EnableAudio = !ConfigManager.Config.AudioInfo.EnableAudio;
-		 AudioInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleFrameCounter()
-	  {
-		 ConfigManager.Config.PreferenceInfo.ShowFrameCounter = !ConfigManager.Config.PreferenceInfo.ShowFrameCounter;
-		 PreferenceInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleLagCounter()
-	  {
-		 ConfigManager.Config.EmulationInfo.ShowLagCounter = !ConfigManager.Config.EmulationInfo.ShowLagCounter;
-		 EmulationInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleGameTimer()
-	  {
-		 ConfigManager.Config.PreferenceInfo.ShowGameTimer = !ConfigManager.Config.PreferenceInfo.ShowGameTimer;
-		 PreferenceInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleOsd()
-	  {
-		 ConfigManager.Config.PreferenceInfo.DisableOsd = !ConfigManager.Config.PreferenceInfo.DisableOsd;
-		 PreferenceInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleAlwaysOnTop()
-	  {
-		 ConfigManager.Config.PreferenceInfo.AlwaysOnTop = !ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
-		 ConfigManager.ApplyChanges();
-		 this.TopMost = ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
-	  }
-
-	  private void ToggleSprites()
-	  {
-		 ConfigManager.Config.VideoInfo.DisableSprites = !ConfigManager.Config.VideoInfo.DisableSprites;
-		 VideoInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleBackground()
-	  {
-		 ConfigManager.Config.VideoInfo.DisableBackground = !ConfigManager.Config.VideoInfo.DisableBackground;
-		 VideoInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleDebugInfo()
-	  {
-		 ConfigManager.Config.PreferenceInfo.DisplayDebugInfo = !ConfigManager.Config.PreferenceInfo.DisplayDebugInfo;
-		 PreferenceInfo.ApplyConfig();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void ToggleCheats()
-	  {
-		 ConfigManager.Config.DisableAllCheats = !ConfigManager.Config.DisableAllCheats;
-		 if (ConfigManager.Config.DisableAllCheats)
-		 {
-			InteropEmu.DisplayMessage("Cheats", "CheatsDisabled");
-		 }
-		 CheatInfo.ApplyCheats();
-		 ConfigManager.ApplyChanges();
-	  }
-
-	  private void UpdateMenus()
-	  {
-		 if (_shuttingDown)
-		 {
-			return;
-		 }
-
-		 try
-		 {
-			if (this.InvokeRequired)
-			{
-			   this.BeginInvoke((MethodInvoker)(() => this.UpdateMenus()));
+		private void ExecuteShortcut(EmulatorShortcut shortcut)
+		{
+			Func<bool> isActionEnabled;
+			if(_actionEnabledFuncs.TryGetValue(shortcut, out isActionEnabled)) {
+				isActionEnabled = _actionEnabledFuncs[shortcut];
+				if(isActionEnabled != null && !isActionEnabled()) {
+					//Action disabled
+					return;
+				}
 			}
+
+			bool restoreFullscreen = _frmFullscreenRenderer != null;
+
+			switch(shortcut) {
+				case EmulatorShortcut.Pause: PauseEmu(); break;
+				case EmulatorShortcut.Reset: this.ResetEmu(); break;
+				case EmulatorShortcut.PowerCycle: this.PowerCycleEmu(); break;
+				case EmulatorShortcut.ReloadRom: InteropEmu.ReloadRom(); break;
+				case EmulatorShortcut.PowerOff: Task.Run(() => InteropEmu.Stop()); break;
+				case EmulatorShortcut.Exit: this.Close(); break;
+
+				case EmulatorShortcut.ToggleCheats: ToggleCheats(); break;
+				case EmulatorShortcut.ToggleAudio: ToggleAudio(); break;
+				case EmulatorShortcut.ToggleFps: ToggleFps(); break;
+				case EmulatorShortcut.ToggleBackground: ToggleBackground(); break;
+				case EmulatorShortcut.ToggleSprites: ToggleSprites(); break;
+				case EmulatorShortcut.ToggleGameTimer: ToggleGameTimer(); break;
+				case EmulatorShortcut.ToggleFrameCounter: ToggleFrameCounter(); break;
+				case EmulatorShortcut.ToggleLagCounter: ToggleLagCounter(); break;
+				case EmulatorShortcut.ToggleOsd: ToggleOsd(); break;
+				case EmulatorShortcut.ToggleAlwaysOnTop: ToggleAlwaysOnTop(); break;
+				case EmulatorShortcut.ToggleDebugInfo: ToggleDebugInfo(); break;
+				case EmulatorShortcut.MaxSpeed: ToggleMaxSpeed(); break;
+				case EmulatorShortcut.ToggleFullscreen: ToggleFullscreen(); restoreFullscreen = false; break;
+
+				case EmulatorShortcut.OpenFile: OpenFile(); break;
+				case EmulatorShortcut.IncreaseSpeed: InteropEmu.IncreaseEmulationSpeed(); break;
+				case EmulatorShortcut.DecreaseSpeed: InteropEmu.DecreaseEmulationSpeed(); break;
+				case EmulatorShortcut.SwitchDiskSide: InteropEmu.FdsSwitchDiskSide(); break;
+				case EmulatorShortcut.EjectDisk: InteropEmu.FdsEjectDisk(); break;
+
+				case EmulatorShortcut.SetScale1x: SetScale(1); break;
+				case EmulatorShortcut.SetScale2x: SetScale(2); break;
+				case EmulatorShortcut.SetScale3x: SetScale(3); break;
+				case EmulatorShortcut.SetScale4x: SetScale(4); break;
+				case EmulatorShortcut.SetScale5x: SetScale(5); break;
+				case EmulatorShortcut.SetScale6x: SetScale(6); break;
+					
+				case EmulatorShortcut.InsertCoin1: InteropEmu.VsInsertCoin(0); break;
+				case EmulatorShortcut.InsertCoin2: InteropEmu.VsInsertCoin(1); break;
+				case EmulatorShortcut.InsertCoin3: InteropEmu.VsInsertCoin(2); break;
+				case EmulatorShortcut.InsertCoin4: InteropEmu.VsInsertCoin(3); break;
+
+				case EmulatorShortcut.InputBarcode:
+					using(frmInputBarcode frm = new frmInputBarcode()) {
+						frm.ShowDialog(this, this);
+					}
+					break;
+
+				case EmulatorShortcut.TakeScreenshot: InteropEmu.TakeScreenshot(); break;
+				case EmulatorShortcut.LoadRandomGame: LoadRandomGame(); break;
+
+				case EmulatorShortcut.LoadStateFromFile: LoadStateFromFile(); break;
+				case EmulatorShortcut.SaveStateToFile: SaveStateToFile(); break;
+
+				case EmulatorShortcut.LoadStateDialog:
+					if(_frmFullscreenRenderer != null) {
+						this.SetFullscreenState(false);
+						restoreFullscreen = false;
+					}
+					ctrlRecentGames.ShowScreen(GameScreenMode.LoadState);
+					ctrlRecentGames.Height = this.ClientSize.Height - ctrlRecentGames.Top; 
+					break;
+
+				case EmulatorShortcut.SaveStateDialog:
+					if(_frmFullscreenRenderer != null) {
+						this.SetFullscreenState(false);
+						restoreFullscreen = false;
+					}
+					ctrlRecentGames.ShowScreen(GameScreenMode.SaveState);
+					ctrlRecentGames.Height = this.ClientSize.Height - ctrlRecentGames.Top;
+					break;
+
+				case EmulatorShortcut.SaveStateSlot1: SaveState(1); break;
+				case EmulatorShortcut.SaveStateSlot2: SaveState(2); break;
+				case EmulatorShortcut.SaveStateSlot3: SaveState(3); break;
+				case EmulatorShortcut.SaveStateSlot4: SaveState(4); break;
+				case EmulatorShortcut.SaveStateSlot5: SaveState(5); break;
+				case EmulatorShortcut.SaveStateSlot6: SaveState(6); break;
+				case EmulatorShortcut.SaveStateSlot7: SaveState(7); break;
+				case EmulatorShortcut.SaveStateSlot8: SaveState(8); break;
+				case EmulatorShortcut.SaveStateSlot9: SaveState(9); break;
+				case EmulatorShortcut.SaveStateSlot10: SaveState(10); break;
+				case EmulatorShortcut.LoadStateSlot1: LoadState(1); break;
+				case EmulatorShortcut.LoadStateSlot2: LoadState(2); break;
+				case EmulatorShortcut.LoadStateSlot3: LoadState(3); break;
+				case EmulatorShortcut.LoadStateSlot4: LoadState(4); break;
+				case EmulatorShortcut.LoadStateSlot5: LoadState(5); break;
+				case EmulatorShortcut.LoadStateSlot6: LoadState(6); break;
+				case EmulatorShortcut.LoadStateSlot7: LoadState(7); break;
+				case EmulatorShortcut.LoadStateSlot8: LoadState(8); break;
+				case EmulatorShortcut.LoadStateSlot9: LoadState(9); break;
+				case EmulatorShortcut.LoadStateSlot10: LoadState(10); break;
+				case EmulatorShortcut.LoadStateSlotAuto: LoadState(11); break;
+
+				case EmulatorShortcut.LoadLastSession: LoadLastSession(); break;
+			}
+
+			if(restoreFullscreen && _frmFullscreenRenderer == null && !_shuttingDown) {
+				//Need to restore fullscreen mode after showing a dialog
+				this.SetFullscreenState(true);
+			}
+		}
+
+		private void ToggleFullscreen()
+		{
+			SetFullscreenState(!_fullscreenMode);
+		}
+
+		private void ToggleMaxSpeed()
+		{
+			if(ConfigManager.Config.EmulationInfo.EmulationSpeed == 0) {
+				SetEmulationSpeed(100);
+			} else {
+				SetEmulationSpeed(0);
+			}
+		}
+
+		private void ToggleFps()
+		{
+			mnuShowFPS.Checked = !mnuShowFPS.Checked;
+			UpdateEmulationFlags();
+		}
+
+		private void ToggleAudio()
+		{
+			ConfigManager.Config.AudioInfo.EnableAudio = !ConfigManager.Config.AudioInfo.EnableAudio;
+			AudioInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleFrameCounter()
+		{
+			ConfigManager.Config.PreferenceInfo.ShowFrameCounter = !ConfigManager.Config.PreferenceInfo.ShowFrameCounter;
+			PreferenceInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleLagCounter()
+		{
+			ConfigManager.Config.EmulationInfo.ShowLagCounter = !ConfigManager.Config.EmulationInfo.ShowLagCounter;
+			EmulationInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleGameTimer()
+		{
+			ConfigManager.Config.PreferenceInfo.ShowGameTimer = !ConfigManager.Config.PreferenceInfo.ShowGameTimer;
+			PreferenceInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleOsd()
+		{
+			ConfigManager.Config.PreferenceInfo.DisableOsd = !ConfigManager.Config.PreferenceInfo.DisableOsd;
+			PreferenceInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleAlwaysOnTop()
+		{
+			ConfigManager.Config.PreferenceInfo.AlwaysOnTop = !ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
+			ConfigManager.ApplyChanges();
+			this.TopMost = ConfigManager.Config.PreferenceInfo.AlwaysOnTop;
+		}
+
+		private void ToggleSprites()
+		{
+			ConfigManager.Config.VideoInfo.DisableSprites = !ConfigManager.Config.VideoInfo.DisableSprites;
+			VideoInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleBackground()
+		{
+			ConfigManager.Config.VideoInfo.DisableBackground = !ConfigManager.Config.VideoInfo.DisableBackground;
+			VideoInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleDebugInfo()
+		{
+			ConfigManager.Config.PreferenceInfo.DisplayDebugInfo = !ConfigManager.Config.PreferenceInfo.DisplayDebugInfo;
+			PreferenceInfo.ApplyConfig();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void ToggleCheats()
+		{
+			ConfigManager.Config.DisableAllCheats = !ConfigManager.Config.DisableAllCheats;
+			if(ConfigManager.Config.DisableAllCheats) {
+				InteropEmu.DisplayMessage("Cheats", "CheatsDisabled");
+			}
+			CheatInfo.ApplyCheats();
+			ConfigManager.ApplyChanges();
+		}
+
+		private void UpdateMenus()
+		{
+			if(_shuttingDown) {
+				return;
+			}
+
 			try {
 				if(this.InvokeRequired) {
 					this.BeginInvoke((MethodInvoker)(() => this.UpdateMenus()));
 				} else {
 					bool running = _emuThread != null;
-					bool devMode = ConfigManager.Config.PreferenceInfo.DeveloperMode;
-					mnuDebug.Visible = devMode;
+					bool runAheadEnabled = ConfigManager.Config.EmulationInfo.RunAheadFrames > 0;
 
 					panelInfo.Visible = !running;
 
@@ -1343,9 +1230,7 @@ namespace Mesen.GUI.Forms
 					mnuStartRecordTapeFile.Enabled = !tapeRecording && !isNetPlayClient;
 					mnuStopRecordTapeFile.Enabled = tapeRecording;
 
-					mnuDebugger.Visible = !devMode;
-					mnuDebugger.Enabled = !devMode && running;
-					mnuDebugDebugger.Enabled = devMode && running;
+					mnuDebugger.Enabled = running;
 					mnuApuViewer.Enabled = running;
 					mnuAssembler.Enabled = running;
 					mnuMemoryViewer.Enabled = running;
@@ -1364,368 +1249,286 @@ namespace Mesen.GUI.Forms
 					mnuOpenPaletteViewer.Enabled = running;
 
 #if !HIDETESTMENU
-			   //Keep this option hidden for now, until some remaining issues are fixed.
-			   mnuDebugDualSystemSecondaryCpu.Visible = _isDualSystem;
-			   sepDebugDualSystemSecondaryCpu.Visible = _isDualSystem;
+					//Keep this option hidden for now, until some remaining issues are fixed.
+					mnuDebugDualSystemSecondaryCpu.Visible = _isDualSystem;
+					sepDebugDualSystemSecondaryCpu.Visible = _isDualSystem;
 #else
 					mnuDebugDualSystemSecondaryCpu.Visible = false;
 					sepDebugDualSystemSecondaryCpu.Visible = false;
 #endif
 
-			   mnuInstallHdPack.Enabled = running;
-			   mnuHdPackEditor.Enabled = !netPlay && running;
+					mnuInstallHdPack.Enabled = running;
+					mnuHdPackEditor.Enabled = !netPlay && running;
 
-			   mnuNetPlay.Enabled = !InteropEmu.IsNsf();
-			   if (running && InteropEmu.IsNsf())
-			   {
-				  mnuPowerCycle.Enabled = false;
-				  mnuMovies.Enabled = mnuPlayMovie.Enabled = mnuStopMovie.Enabled = mnuRecordMovie.Enabled = false;
-			   }
+					mnuNetPlay.Enabled = !InteropEmu.IsNsf() && !runAheadEnabled;
 
-			   mnuRegionAuto.Checked = ConfigManager.Config.Region == NesModel.Auto;
-			   mnuRegionNtsc.Checked = ConfigManager.Config.Region == NesModel.NTSC;
-			   mnuRegionPal.Checked = ConfigManager.Config.Region == NesModel.PAL;
-			   mnuRegionDendy.Checked = ConfigManager.Config.Region == NesModel.Dendy;
+					bool enableMovies = (!running || !InteropEmu.IsNsf()) && !runAheadEnabled;
+					mnuMovies.Enabled = mnuPlayMovie.Enabled = mnuStopMovie.Enabled = mnuRecordMovie.Enabled = enableMovies;
 
-			   bool autoInsertDisabled = !InteropEmu.FdsIsAutoInsertDiskEnabled();
-			   mnuSelectDisk.Enabled = autoInsertDisabled;
+					mnuRegionAuto.Checked = ConfigManager.Config.Region == NesModel.Auto;
+					mnuRegionNtsc.Checked = ConfigManager.Config.Region == NesModel.NTSC;
+					mnuRegionPal.Checked = ConfigManager.Config.Region == NesModel.PAL;
+					mnuRegionDendy.Checked = ConfigManager.Config.Region == NesModel.Dendy;
 
-			   bool isHdPackLoader = InteropEmu.IsHdPpu();
-			   mnuNtscFilter.Enabled = !isHdPackLoader;
-			   mnuNtscBisqwitQuarterFilter.Enabled = !isHdPackLoader;
-			   mnuNtscBisqwitHalfFilter.Enabled = !isHdPackLoader;
-			   mnuNtscBisqwitFullFilter.Enabled = !isHdPackLoader;
+					bool autoInsertDisabled = !InteropEmu.FdsIsAutoInsertDiskEnabled();
+					mnuSelectDisk.Enabled = autoInsertDisabled;
+
+					bool isHdPackLoader = InteropEmu.IsHdPpu();
+					mnuNtscFilter.Enabled = !isHdPackLoader;
+					mnuNtscBisqwitQuarterFilter.Enabled = !isHdPackLoader;
+					mnuNtscBisqwitHalfFilter.Enabled = !isHdPackLoader;
+					mnuNtscBisqwitFullFilter.Enabled = !isHdPackLoader;
+				}
+			} catch { }
+		}
+
+		private void UpdateWindowTitle()
+		{
+			string title = "Mesen";
+			if(!string.IsNullOrWhiteSpace(_currentGame)) {
+				title += " - " + _currentGame;
 			}
-		 }
-		 catch { }
-	  }
-
-	  private void UpdateWindowTitle()
-	  {
-		 string title = "Mesen";
-		 if (!string.IsNullOrWhiteSpace(_currentGame))
-		 {
-			title += " - " + _currentGame;
-		 }
-		 if (ConfigManager.Config.PreferenceInfo.DisplayTitleBarInfo)
-		 {
-			title += string.Format(" - {0}x{1} ({2:0.##}x, {3}) - {4}", ctrlRenderer.Width, ctrlRenderer.Height, ConfigManager.Config.VideoInfo.VideoScale, ResourceHelper.GetEnumText(ConfigManager.Config.VideoInfo.AspectRatio), ResourceHelper.GetEnumText(ConfigManager.Config.VideoInfo.VideoFilter));
-		 }
-		 this.Text = title;
-	  }
-
-
-	  public void StartEmuThread()
-	  {
-		 if (_emuThread == null)
-		 {
-			if (ConfigManager.OpenDebugger)
-			{
-			   DebugWindowManager.OpenDebugWindow(DebugWindow.Debugger);
+			if(ConfigManager.Config.PreferenceInfo.DisplayTitleBarInfo) {
+				title += string.Format(" - {0}x{1} ({2:0.##}x, {3}) - {4}", ctrlRenderer.Width, ctrlRenderer.Height, ConfigManager.Config.VideoInfo.VideoScale, ResourceHelper.GetEnumText(ConfigManager.Config.VideoInfo.AspectRatio), ResourceHelper.GetEnumText(ConfigManager.Config.VideoInfo.VideoFilter));
 			}
-			_emuThread = new Thread(() =>
-			{
-			   try
-			   {
-				  InteropEmu.Run();
-				  _emuThread = null;
-			   }
-			   catch (Exception ex)
-			   {
-				  MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
-				  _emuThread = null;
-			   }
-			});
-			_emuThread.Start();
-		 }
-		 UpdateMenus();
-	  }
-
-	  private void StopEmu()
-	  {
-		 InteropEmu.Stop();
-	  }
-
-	  private void PauseEmu()
-	  {
-		 frmDebugger debugger = DebugWindowManager.GetDebugger();
-		 if (debugger != null)
-		 {
-			debugger.TogglePause();
-		 }
-		 else
-		 {
-			if (InteropEmu.IsPaused())
-			{
-			   InteropEmu.Resume();
+			this.Text = title;
+		}
+		
+		private void StartEmuThread()
+		{
+			if(_emuThread == null) {
+				_emuThread = new Thread(() => {
+					try {
+						InteropEmu.Run();
+						_emuThread = null;
+					} catch(Exception ex) {
+						MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
+						_emuThread = null;
+					}
+				});
+				_emuThread.Start();
 			}
-			else
-			{
-			   InteropEmu.Pause();
+			UpdateMenus();
+		}
+
+		private void StopEmu()
+		{
+			InteropEmu.Stop();
+		}
+
+		private void PauseEmu()
+		{
+			frmDebugger debugger = DebugWindowManager.GetDebugger();
+			if(debugger != null) {
+				debugger.TogglePause();
+			} else {
+				if(InteropEmu.IsPaused()) {
+					InteropEmu.Resume();
+				} else {
+					InteropEmu.Pause();
+				}
+
+				ctrlNsfPlayer.UpdateText();
+			}
+		}
+
+		private void ResetEmu()
+		{
+			if(!ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower || MesenMsgBox.Show("ConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK) {
+				InteropEmu.Reset();
+			}
+		}
+
+		private void PowerCycleEmu()
+		{
+			if(!ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower || MesenMsgBox.Show("ConfirmPowerCycle", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK) {
+				InteropEmu.PowerCycle();
+			}
+		}
+
+		protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+		{
+			if(!this.menuStrip.Enabled) {
+				//Make sure we disable all shortcut keys while the bar is disabled (i.e when running tests)
+				return false;
 			}
 
-			ctrlNsfPlayer.UpdateText();
-		 }
-	  }
-
-	  private void ResetEmu()
-	  {
-		 if (!ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower || MesenMsgBox.Show("ConfirmReset", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK)
-		 {
-			InteropEmu.Reset();
-		 }
-	  }
-
-	  private void PowerCycleEmu()
-	  {
-		 if (!ConfigManager.Config.PreferenceInfo.ConfirmExitResetPower || MesenMsgBox.Show("ConfirmPowerCycle", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) == DialogResult.OK)
-		 {
-			InteropEmu.PowerCycle();
-		 }
-	  }
-
-	  protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
-	  {
-		 if (!this.menuStrip.Enabled)
-		 {
-			//Make sure we disable all shortcut keys while the bar is disabled (i.e when running tests)
-			return false;
-		 }
-
-		 if (this.HideMenuStrip && (keyData & Keys.Alt) == Keys.Alt)
-		 {
-			if (this.menuStrip.Visible && !this.menuStrip.ContainsFocus)
-			{
-			   this.menuStrip.Visible = false;
+			if(this.HideMenuStrip && (keyData & Keys.Alt) == Keys.Alt) {
+				if(this.menuStrip.Visible && !this.menuStrip.ContainsFocus) {
+					this.menuStrip.Visible = false;
+				} else {
+					this.menuStrip.Visible = true;
+					this.menuStrip.Focus();
+				}
 			}
-			else
-			{
-			   this.menuStrip.Visible = true;
-			   this.menuStrip.Focus();
-			}
-		 }
 
 #if !HIDETESTMENU
-<<<<<<< HEAD
-		 if (keyData == Keys.Pause)
-		 {
-			if (InteropEmu.RomTestRecording())
-			{
-			   InteropEmu.RomTestStop();
+			if(keyData == Keys.Pause) {
+				if(InteropEmu.RomTestRecording()) {
+					InteropEmu.RomTestStop();
+				} else {
+					InteropEmu.RomTestRecord(ConfigManager.TestFolder + "\\" + InteropEmu.GetRomInfo().GetRomName() + ".mtp", true);
+				}
 			}
-			else
-			{
-			   InteropEmu.RomTestRecord(ConfigManager.TestFolder + "\\" + InteropEmu.GetRomInfo().GetRomName() + ".mtp", true);
-			}
-		 }
 #endif
 
-		 return base.ProcessCmdKey(ref msg, keyData);
-	  }
-
-	  private void SelectFdsBiosPrompt()
-	  {
-		 if (MesenMsgBox.Show("FdsBiosNotFound", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) == DialogResult.OK)
-		 {
-			using (OpenFileDialog ofd = new OpenFileDialog())
-			{
-			   ofd.SetFilter(ResourceHelper.GetMessage("FilterAll"));
-			   if (ofd.ShowDialog(this) == DialogResult.OK)
-			   {
-				  string hash = MD5Helper.GetMD5Hash(ofd.FileName).ToLowerInvariant();
-				  if (hash == "ca30b50f880eb660a320674ed365ef7a" || hash == "c1a9e9415a6adde3c8563c622d4c9fce")
-				  {
-					 File.Copy(ofd.FileName, Path.Combine(ConfigManager.HomeFolder, "FdsBios.bin"));
-					 LoadROM(_currentRomPath.Value, ConfigManager.Config.PreferenceInfo.AutoLoadIpsPatches);
-				  }
-				  else
-				  {
-					 MesenMsgBox.Show("InvalidFdsBios", MessageBoxButtons.OK, MessageBoxIcon.Error);
-				  }
-			   }
+			return base.ProcessCmdKey(ref msg, keyData);
+		}
+		
+		private void SelectBiosPrompt(string fileName, int fileSize, RomFormat format)
+		{
+			if(BiosHelper.RequestBiosFile(fileName, fileSize, format)) {
+				LoadROM(_currentRomPath.Value, ConfigManager.Config.PreferenceInfo.AutoLoadIpsPatches);
 			}
-		 }
-	  }
+		}
 
-	  private void frmMain_DragDrop(object sender, DragEventArgs e)
-	  {
-		 try
-		 {
-			string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
-			if (File.Exists(files[0]))
-			{
-			   LoadFile(files[0]);
-			   this.Activate();
+		private void frmMain_DragDrop(object sender, DragEventArgs e)
+		{
+			try {
+				string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+				if(File.Exists(files[0])) {
+					LoadFile(files[0]);
+					this.Activate();
+				} else {
+					InteropEmu.DisplayMessage("Error", "File not found: " + files[0]);
+				}
+			} catch(Exception ex) {
+				MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
 			}
-			else
-			{
-			   InteropEmu.DisplayMessage("Error", "File not found: " + files[0]);
+		}
+
+		private void frmMain_DragEnter(object sender, DragEventArgs e)
+		{
+			try {
+				if(e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop)) {
+					e.Effect = DragDropEffects.Copy;
+				} else {
+					InteropEmu.DisplayMessage("Error", "Unsupported operation.");
+				}
+			} catch(Exception ex) {
+				MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
 			}
-		 }
-		 catch (Exception ex)
-		 {
-			MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
-		 }
-	  }
+		}
 
-	  private void frmMain_DragEnter(object sender, DragEventArgs e)
-	  {
-		 try
-		 {
-			if (e.Data != null && e.Data.GetDataPresent(DataFormats.FileDrop))
-			{
-			   e.Effect = DragDropEffects.Copy;
+		private void ctrlRenderer_DoubleClick(object sender, EventArgs e)
+		{
+			if(!CursorManager.NeedMouseIcon && !CursorManager.AllowMouseCapture && !DebugWindowManager.HasOpenedWindow) {
+				//Disable double clicking (used to switch to fullscreen mode) when using a mouse-controlled device (or when debugger is opened)
+				ToggleFullscreen();
 			}
-			else
-			{
-			   InteropEmu.DisplayMessage("Error", "Unsupported operation.");
+		}
+
+		private void panelRenderer_Click(object sender, EventArgs e)
+		{
+			if(this.HideMenuStrip) {
+				this.menuStrip.Visible = false;
 			}
-		 }
-		 catch (Exception ex)
-		 {
-			MesenMsgBox.Show("UnexpectedError", MessageBoxButtons.OK, MessageBoxIcon.Error, ex.ToString());
-		 }
-	  }
+			CursorManager.CaptureMouse();
 
-	  private void ctrlRenderer_DoubleClick(object sender, EventArgs e)
-	  {
-		 if (!CursorManager.NeedMouseIcon && !CursorManager.AllowMouseCapture && !DebugWindowManager.HasOpenedWindow)
-		 {
-			//Disable double clicking (used to switch to fullscreen mode) when using a mouse-controlled device (or when debugger is opened)
-			ToggleFullscreen();
-		 }
-	  }
+			ctrlRenderer.Focus();
+		}
 
-	  private void panelRenderer_Click(object sender, EventArgs e)
-	  {
-		 if (this.HideMenuStrip)
-		 {
-			this.menuStrip.Visible = false;
-		 }
-		 CursorManager.CaptureMouse();
-
-		 ctrlRenderer.Focus();
-	  }
-
-	  private void ctrlRenderer_Enter(object sender, EventArgs e)
-	  {
-		 if (this.HideMenuStrip)
-		 {
-			this.menuStrip.Visible = false;
-		 }
-	  }
-
-	  private void menuStrip_VisibleChanged(object sender, EventArgs e)
-	  {
-		 this.UpdateRendererLocation();
-	  }
-
-	  private void UpdateRendererLocation()
-	  {
-		 if (this.HideMenuStrip)
-		 {
-			IntPtr handle = this.Handle;
-			this.BeginInvoke((MethodInvoker)(() =>
-			{
-			   int rendererTop = (panelRenderer.Height + (this.menuStrip.Visible ? menuStrip.Height : 0) - ctrlRenderer.Height) / 2;
-			   this.ctrlRenderer.Top = rendererTop + (this.menuStrip.Visible ? -menuStrip.Height : 0);
-			   this.ctrlRecentGames.Top = this.menuStrip.Visible ? -menuStrip.Height : 0;
-			}));
-		 }
-	  }
-
-	  private void InitializeNsfMode(bool gameLoaded = false)
-	  {
-		 if (this.InvokeRequired)
-		 {
-			if (InteropEmu.IsNsf())
-			{
-			   if (InteropEmu.IsConnected())
-			   {
-				  InteropEmu.Disconnect();
-			   }
-			   if (InteropEmu.IsServerRunning())
-			   {
-				  InteropEmu.StopServer();
-			   }
+		private void ctrlRenderer_Enter(object sender, EventArgs e)
+		{
+			if(this.HideMenuStrip) {
+				this.menuStrip.Visible = false;
 			}
-			this.BeginInvoke((MethodInvoker)(() => this.InitializeNsfMode(gameLoaded)));
-		 }
-		 else
-		 {
-			if (InteropEmu.IsNsf())
-			{
-			   this.SetFullscreenState(false);
+		}
 
-			   if (gameLoaded)
-			   {
-				  //Force emulation speed to 100 when loading a NSF
-				  SetEmulationSpeed(100);
-			   }
+		private void menuStrip_VisibleChanged(object sender, EventArgs e)
+		{
+			this.UpdateRendererLocation();
+		}
 
-			   if (!this._isNsfPlayerMode)
-			   {
-				  this._nonNsfSize = this.WindowState != FormWindowState.Normal ? this.RestoreBounds.Size : this.Size;
-				  this._nonNsfMinimumSize = this.MinimumSize;
-				  this.Size = ctrlNsfPlayer.WindowMinimumSize;
-				  this.MinimumSize = ctrlNsfPlayer.WindowMinimumSize;
-			   }
-			   this._isNsfPlayerMode = true;
-			   this.ctrlNsfPlayer.UpdateText();
-			   this.ctrlNsfPlayer.Visible = true;
-			   this.ctrlNsfPlayer.Focus();
-
-			   NsfHeader header = InteropEmu.NsfGetHeader();
-			   if (header.HasSongName)
-			   {
-				  _currentGame = header.GetSongName();
-			   }
+		private void UpdateRendererLocation()
+		{
+			if(this.HideMenuStrip) {
+				IntPtr handle = this.Handle;
+				this.BeginInvoke((MethodInvoker)(() => {
+					int rendererTop = (panelRenderer.Height + (this.menuStrip.Visible ? menuStrip.Height : 0) - ctrlRenderer.Height) / 2;
+					this.ctrlRenderer.Top = rendererTop + (this.menuStrip.Visible ? -menuStrip.Height : 0);
+					this.ctrlRecentGames.Top = this.menuStrip.Visible ? -menuStrip.Height : 0;
+				}));
 			}
-			else if (this._isNsfPlayerMode)
-			{
-			   this.MinimumSize = this._nonNsfMinimumSize;
-			   this.Size = this._nonNsfSize.Value;
-			   this._nonNsfSize = null;
-			   this._isNsfPlayerMode = false;
-			   this.ctrlNsfPlayer.Visible = false;
+		}
+
+		private void InitializeNsfMode(bool gameLoaded = false)
+		{
+			if(this.InvokeRequired) {
+				if(InteropEmu.IsNsf()) {
+					if(InteropEmu.IsConnected()) {
+						InteropEmu.Disconnect();
+					}
+					if(InteropEmu.IsServerRunning()) {
+						InteropEmu.StopServer();
+					}
+				}
+				this.BeginInvoke((MethodInvoker)(() => this.InitializeNsfMode(gameLoaded)));
+			} else {
+				if(InteropEmu.IsNsf()) {
+					this.SetFullscreenState(false);
+
+					if(gameLoaded) {
+						//Force emulation speed to 100 when loading a NSF
+						SetEmulationSpeed(100);
+					}
+
+					if(!this._isNsfPlayerMode) {
+						this._nonNsfSize = this.WindowState != FormWindowState.Normal ? this.RestoreBounds.Size : this.Size;
+						this._nonNsfMinimumSize = this.MinimumSize;
+						this.Size = ctrlNsfPlayer.WindowMinimumSize;
+						this.MinimumSize = ctrlNsfPlayer.WindowMinimumSize;
+					}
+					this._isNsfPlayerMode = true;
+					this.ctrlNsfPlayer.UpdateText();
+					this.ctrlNsfPlayer.Visible = true;					
+					this.ctrlNsfPlayer.Focus();
+
+					NsfHeader header = InteropEmu.NsfGetHeader();
+					if(header.HasSongName) {
+						_currentGame = header.GetSongName();
+					}
+				} else if(this._isNsfPlayerMode) {
+					this.MinimumSize = this._nonNsfMinimumSize;
+					this.Size = this._nonNsfSize.Value;
+					this._nonNsfSize = null;
+					this._isNsfPlayerMode = false;
+					this.ctrlNsfPlayer.Visible = false;
+				}
 			}
-		 }
-	  }
+		}
 
-	  private void panelRenderer_MouseLeave(object sender, EventArgs e)
-	  {
-		 CursorManager.OnMouseLeave();
-	  }
+		private void panelRenderer_MouseLeave(object sender, EventArgs e)
+		{
+			CursorManager.OnMouseLeave();
+		}
 
-	  private void ctrlRecentGames_OnRecentGameLoaded(Controls.RecentGameInfo gameInfo)
-	  {
-		 _currentRomPath = gameInfo.RomPath;
-	  }
+		private void ctrlRecentGames_OnRecentGameLoaded(Controls.RecentGameInfo gameInfo)
+		{
+			_currentRomPath = gameInfo.RomPath;
+		}
 
-	  private void ctrlNsfPlayer_MouseMove(object sender, MouseEventArgs e)
-	  {
-		 if (this.HideMenuStrip && !this.menuStrip.ContainsFocus)
-		 {
-			Point nsfPlayerPosition = this.ctrlNsfPlayer.PointToClient(((Control)sender).PointToScreen(e.Location));
-			this.menuStrip.Visible = nsfPlayerPosition.Y < 30;
-		 }
-	  }
+		private void ctrlNsfPlayer_MouseMove(object sender, MouseEventArgs e)
+		{
+			if(this.HideMenuStrip && !this.menuStrip.ContainsFocus) {
+				Point nsfPlayerPosition = this.ctrlNsfPlayer.PointToClient(((Control)sender).PointToScreen(e.Location));
+				this.menuStrip.Visible = nsfPlayerPosition.Y < 30;
+			}
+		}
 
-	  private void mnu_DropDownOpened(object sender, EventArgs e)
-	  {
-		 _inMenu++;
-	  }
+		private void mnu_DropDownOpened(object sender, EventArgs e)
+		{
+			_inMenu++;
+		}
 
-	  private void mnu_DropDownClosed(object sender, EventArgs e)
-	  {
-		 Task.Run(() =>
-		 {
-			Thread.Sleep(100);
-			this.BeginInvoke((Action)(() =>
-			{
-			   _inMenu--;
-			}));
-		 });
-	  }
-   }
+		private void mnu_DropDownClosed(object sender, EventArgs e)
+		{
+			Task.Run(() => {
+				Thread.Sleep(100);
+				this.BeginInvoke((Action)(() => {
+					_inMenu--;
+				}));
+			});
+		}
+	}
 }

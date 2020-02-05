@@ -562,6 +562,7 @@
     <ClInclude Include="FaridSlrom.h" />
     <ClInclude Include="FaridUnrom.h" />
     <ClInclude Include="FdsSystemActionManager.h" />
+    <ClInclude Include="FlashSST39SF040.h" />
     <ClInclude Include="Gkcx1.h" />
     <ClInclude Include="HdPackConditions.h" />
     <ClInclude Include="HistoryViewer.h" />
@@ -628,7 +629,6 @@
     <ClInclude Include="Rambo1_158.h" />
     <ClInclude Include="RecordedRomTest.h" />
     <ClInclude Include="AutoSaveManager.h" />
-    <ClInclude Include="AviRecorder.h" />
     <ClInclude Include="Ax5705.h" />
     <ClInclude Include="Bandai74161_7432.h" />
     <ClInclude Include="BandaiFcg.h" />
@@ -1020,7 +1020,6 @@
     <ClCompile Include="RawVideoFilter.cpp" />
     <ClCompile Include="RecordedRomTest.cpp" />
     <ClCompile Include="AutoSaveManager.cpp" />
-    <ClCompile Include="AviRecorder.cpp" />
     <ClCompile Include="BaseControlDevice.cpp" />
     <ClCompile Include="BaseMapper.cpp" />
     <ClCompile Include="BisqwitNtscFilter.cpp" />
